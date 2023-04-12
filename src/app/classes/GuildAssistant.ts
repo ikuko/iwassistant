@@ -37,7 +37,7 @@ import { EventEmitter } from './EventEmitter';
 import type { GuildAudioReceiver } from './GuildAudioReceiver';
 import type { GuildVoiceChannel, JoinOptions } from './GuildVoiceChannel';
 import type { Logger } from './Logger';
-import type { AttachedCommand } from './PluginAdaptor';
+import type { AttachedCommand } from './PluginAdapter';
 import type { PluginContextOptions } from './PluginManager';
 
 const LeastPermissions: PermissionsString[] = [
@@ -65,16 +65,18 @@ enum Status {
   destroyed,
 }
 
+type PlayableSpeechMessage = Exclude<PlayableSpeech<'guild'>['message'], undefined>;
+
 export type GuildAssistantInterface = {
   beforeCommandsUpdate(commands: (SlashCommandBuilder | ContextMenuCommandBuilder)[]): Awaitable<void>;
   beforeJoin(options: JoinOptions, rejoin: boolean): Awaitable<void>;
   beforeSpeak(speech: PlayableSpeech<'guild'>): Awaitable<void>;
+  beforeTranscribe(request: STTRequest<'guild'>, engine: ISpeechToText): Awaitable<void>;
   beforeDestroy(): Awaitable<void>;
   onReady(): Awaitable<void>;
   onJoin(channel: VoiceChannel, connection: VoiceConnection, rejoin: boolean): Awaitable<void>;
-  onLeave(): Awaitable<void>;
+  onLeave(retry: boolean): Awaitable<void>;
   onListen(audio: RecognizableAudio<'guild'>): Awaitable<void>;
-  onTranscribe(request: STTRequest<'guild'>, engine: ISpeechToText): Awaitable<void>;
   onDictationCreate(dictation: GuildDictation): Awaitable<void>;
   onTranslationCreate(translation: GuildTranslation): Awaitable<void>;
   // Discord.js events
@@ -244,9 +246,9 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
       if (this.engines.maps.stt.size === 0) return;
       this.audioReceiver.subscribe(connection, channel);
     });
-    this.#voiceChannel.on('leave', () => {
+    this.#voiceChannel.on('leave', (retry) => {
       this.log.info('Left');
-      this.emit('leave');
+      this.emit('leave', retry);
     });
     this.audioReceiver.on('create', (audio) => {
       this.emit('listen', audio);
@@ -427,7 +429,7 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
       if (message) return message;
       this.beep(result);
       const emoji = CommandResultEmoji[result];
-      return (message = await source.dist.send(`${userMention(member.id)} \`/${command.id}\` ${emoji}`));
+      return (message = await source.destination.send(`${userMention(member.id)} \`/${command.id}\` ${emoji}`));
     };
     const event: CommandEvent<'guild'> = {
       type: 'voice',
@@ -490,13 +492,11 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
   transcribe(options: TranscribeOptions): boolean {
     const stt = this.engines.getSTT(options.engine);
     this.fallbackVoice(stt, options);
-    this.emit('transcribe', options.request, stt);
+    options.request.audio.prepare = async () => void (await this.hook('transcribe', options.request, stt));
     return stt.transcribe(options.request);
   }
 
-  createSpeech(
-    options: CreateSpeechOptions & { message?: PlayableSpeech<'guild'>['message'] },
-  ): PlayableSpeech<'guild'> {
+  createSpeech(options: CreateSpeechOptions & { message?: PlayableSpeechMessage }): PlayableSpeech<'guild'> {
     const tts = this.engines.getTTS(options.engine);
     this.fallbackVoice(tts, options);
     const speech = new PlayableSpeechImpl(
@@ -520,12 +520,12 @@ class PlayableSpeechImpl
   readonly #generator: (request: TTSRequest) => Promise<TTSResponse>;
   readonly request: TTSRequest;
   response: TTSResponse | undefined;
-  readonly message?: PlayableSpeech<'guild'>['message'];
+  readonly message?: PlayableSpeechMessage;
 
   constructor(
     generator: (request: TTSRequest) => Promise<TTSResponse>,
     request: TTSRequest,
-    message: PlayableSpeech<'guild'>['message'] | undefined,
+    message: PlayableSpeechMessage | undefined,
     errorHandler: ErrorHandler,
   ) {
     super(errorHandler);

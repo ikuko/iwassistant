@@ -118,12 +118,12 @@ export const plugin: IPlugin<Options> = {
         prevDictation = undefined;
       },
       onListen(audio) {
-        let interim = config.command;
+        let interim = config.command && config.timeout > 0;
         const channelConfig = allChannelConfigs?.[audio.channel.id];
-        if (channelConfig?.dist) {
-          const channel = assistant.guild.channels.cache.get(channelConfig.dist);
+        if (channelConfig?.output) {
+          const channel = assistant.guild.channels.cache.get(channelConfig.output);
           if (channel && (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice)) {
-            audio.dist = channel;
+            audio.destination = channel;
           }
         }
         if (channelConfig?.dictation) {
@@ -140,9 +140,9 @@ export const plugin: IPlugin<Options> = {
             if (!prevDictation || member.id !== prevDictation.userId || now > prevDictation.time + config.nameless) {
               embed.setAuthor({ name: member.displayName, iconURL: member.displayAvatarURL() });
             }
-            const dist = await audio.dist.send({ embeds: [embed] });
-            assistant.emit('dictationCreate', { request, source: request.audio, dist, member });
-            prevDictation = { userId: member.id, channelId: audio.dist.id, time: now };
+            const destination = await audio.destination.send({ embeds: [embed] });
+            assistant.emit('dictationCreate', { request, source: request.audio, destination, member });
+            prevDictation = { userId: member.id, channelId: audio.destination.id, time: now };
           });
         }
         audio.once('end', () => {
@@ -150,7 +150,7 @@ export const plugin: IPlugin<Options> = {
           const command = assistant.interpret(audio.transcript);
           if (command) assistant.run({ command, source: audio });
         });
-        if (interim && config.timeout > 0) {
+        if (interim) {
           const timer = setTimeout(() => audio.abort(), config.timeout);
           const onResult = (transcript: string): void => {
             if (!assistant.activation.pattern.test(transcript)) return;

@@ -29,7 +29,7 @@ type RecognizableAudio<T extends AssistantType = AssistantType> = (T extends 'gu
       readonly type: 'guild';
       readonly member: import('discord.js').GuildMember;
       readonly channel: import('discord.js').VoiceChannel;
-      dist: import('discord.js').TextChannel | import('discord.js').VoiceChannel;
+      destination: import('discord.js').TextChannel | import('discord.js').VoiceChannel;
     }
   : { readonly type: 'home' }) & {
   readonly resource: import('node:stream').Readable;
@@ -37,6 +37,7 @@ type RecognizableAudio<T extends AssistantType = AssistantType> = (T extends 'gu
   readonly transcript: string;
   readonly aborted: boolean;
   abort(): void;
+  prepare?: () => Promise<void>;
 } & import('../classes/EventEmitter').EventEmitter<{
     start: [request: STTRequest<T>];
     end: [request: STTRequest<T>];
@@ -91,7 +92,7 @@ type CommandEvent<
 type GuildDictation = {
   request: STTRequest<'guild'>;
   source: RecognizableAudio<'guild'>;
-  dist: import('discord.js').Message<true>;
+  destination: import('discord.js').Message<true>;
   member: import('discord.js').GuildMember;
 };
 
@@ -99,6 +100,6 @@ type GuildTranslation = {
   request: TranslatorRequest;
   response: TranslatorResponse;
   source: import('discord.js').Message<true>;
-  dist: import('discord.js').Message<true>;
+  destination: import('discord.js').Message<true>;
   member: import('discord.js').GuildMember;
 };
