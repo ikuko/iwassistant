@@ -1,9 +1,10 @@
 services:
-  app:
+  iwassistant:
     image: node:18
     working_dir: /app
+    init: true
     volumes:
       - ./:/app
     environment:
-      - IWASSISTANT_DISCORD_TOKEN=
+      IWASSISTANT_DISCORD_TOKEN: ''
     command: /bin/sh -c "npm install && npm run dev"
