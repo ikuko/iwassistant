@@ -20,6 +20,7 @@ type PlayableSpeech<T extends AssistantType = AssistantType> = PlayableAudio &
         };
       }
     : {}) & {
+    readonly locale: Locale;
     readonly request: TTSRequest;
     readonly response: TTSResponse | undefined;
   };
@@ -44,13 +45,6 @@ type RecognizableAudio<T extends AssistantType = AssistantType> = (T extends 'gu
     abort: [];
     result: [transcript: string, isFinal: boolean];
   }>;
-
-type IAudioPlayer = {
-  readonly active: boolean;
-  play(audio: PlayableAudio): boolean;
-  next(): boolean;
-  stop(): boolean;
-};
 
 type CommandEvent<
   T extends AssistantType = AssistantType,

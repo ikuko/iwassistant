@@ -129,22 +129,35 @@ export const plugin: IPlugin<Options> = {
       let text = pickRandom(action.text);
       if (text) {
         await sleep(waitTime());
-        text = text.replaceAll('${id}', message.author.id);
-        if (text.includes('${name}')) {
-          const member = message.member ?? (await assistant.guild.members.fetch(message.author.id));
-          text = text.replaceAll('${name}', member.displayName);
-        }
+        const member = message.member ?? (await assistant.guild.members.fetch(message.author.id));
+        text = text.replaceAll('${id}', member.id).replaceAll('${name}', member.displayName);
         const typingTime = waitTime() + text.length * 50;
         // https://discordjs.guide/additional-info/changes-in-v13.html#textchannel
         // > This method automatically stops typing after 10 seconds, or when a message is sent.
         await message.channel.sendTyping();
         await sleep(typingTime < 10_000 ? typingTime : 10_000);
-        const sentMessage = await message.channel.send(text);
+        const source = await message.channel.send(text);
         const voiceChannelId = assistant.voice?.channelId;
         if (voiceChannelId) {
-          const target = assistant.data.get('guild-config')?.voiceChannels?.[voiceChannelId]?.input ?? 'all';
-          if (target === 'all' || target === message.channelId) {
-            assistant.speak(decodeMessage(sentMessage.content, sentMessage));
+          const target = assistant.data.get('guild-config')?.voiceChannels?.[voiceChannelId]?.input ?? 'joined';
+          if (target === 'joined' ? voiceChannelId === member.voice.channelId : target === message.channelId) {
+            assistant.speak({
+              engine: {
+                name: assistant.defaultTTS.name,
+                locale: assistant.defaultTTS.locale,
+              },
+              request: {
+                voice: assistant.defaultTTS.voice,
+                speed: assistant.defaultTTS.speed,
+                pitch: assistant.defaultTTS.pitch,
+                text: decodeMessage(source.content, source),
+              },
+              message: {
+                source,
+                member: assistant.self,
+                content: source.content,
+              },
+            });
           }
         }
       }

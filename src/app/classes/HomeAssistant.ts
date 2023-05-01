@@ -2,7 +2,7 @@
 
 import type { Readable } from 'node:stream';
 import type { App } from './App';
-import type { AssistantOptions, CreateSpeechOptions } from './Assistant';
+import type { AssistantOptions, IAudioPlayer } from './Assistant';
 import { Assistant } from './Assistant';
 import type { Datastore } from './Datastore';
 import type { EngineManager } from './EngineManager';
@@ -16,6 +16,11 @@ enum Status {
   destroying,
   destroyed,
 }
+
+type CreateSpeechOptions = {
+  engine: { name: string; locale: Locale };
+  request: TTSRequest;
+};
 
 export type HomeAssistantInterface = {
   beforeTranscribe(request: STTRequest<'home'>): Awaitable<void>;
@@ -70,17 +75,38 @@ export class HomeAssistant extends Assistant<HomeAssistantInterface> {
 
   run(): void {}
 
+  speak(options: string | CreateSpeechOptions): boolean {
+    if (!this.audioPlayer.active) return false;
+    if (typeof options === 'string') {
+      options = {
+        engine: {
+          name: this.defaultTTS.name,
+          locale: this.defaultTTS.locale,
+        },
+        request: {
+          voice: this.defaultTTS.voice,
+          speed: this.defaultTTS.speed,
+          pitch: this.defaultTTS.pitch,
+          text: options,
+        },
+      };
+    }
+    const speech = this.createSpeech(options);
+    return this.audioPlayer.play(speech);
+  }
+
   createSpeech(options: CreateSpeechOptions): PlayableSpeech<'home'> {
     const tts = this.engines.getTTS(options.engine);
     this.fallbackVoice(tts, options);
-    const speech = new PlayableSpeechImpl(
-      async (request) => {
+    const speech = new PlayableSpeechImpl({
+      generator: async (request) => {
         if (request.text.length === 0) return { ...request, resource: this.createEmptyAudioResource() };
         return tts.generate(request);
       },
-      options.request,
-      this.log.error,
-    );
+      locale: options.engine.locale,
+      request: options.request,
+      errorHandler: this.log.error,
+    });
     return speech;
   }
 }
@@ -103,17 +129,20 @@ class PlayableSpeechImpl
   implements PlayableSpeech<'home'>
 {
   readonly #generator: (request: TTSRequest) => Promise<TTSResponse>;
+  readonly locale: Locale;
   readonly request: TTSRequest;
   response: TTSResponse | undefined;
 
-  constructor(
-    generator: (request: TTSRequest) => Promise<TTSResponse>,
-    request: TTSRequest,
-    errorHandler: ErrorHandler,
-  ) {
-    super(errorHandler);
-    this.#generator = generator;
-    this.request = request;
+  constructor(options: {
+    generator: (request: TTSRequest) => Promise<TTSResponse>;
+    locale: Locale;
+    request: TTSRequest;
+    errorHandler: ErrorHandler;
+  }) {
+    super(options.errorHandler);
+    this.#generator = options.generator;
+    this.locale = options.locale;
+    this.request = options.request;
   }
 
   get resource(): Readable | undefined {
