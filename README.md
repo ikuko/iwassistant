@@ -567,12 +567,6 @@ vi docker-compose.yml
 docker compose up
 ```
 
-### Environment variables
-
-Every default.ts config options can be specified as an environment variable by prefixing it with `IWASSISTANT_`, capitalising it, and replacing dots (.) with underscores (_).
-
-For example, the `discord.token` option becomes `IWASSISTANT_DISCORD_TOKEN`.
-
 ## TODO
 
 - More detailed examples

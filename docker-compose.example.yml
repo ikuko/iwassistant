@@ -5,6 +5,4 @@ services:
     init: true
     volumes:
       - ./:/app
-    environment:
-      IWASSISTANT_DISCORD_TOKEN: ''
     command: /bin/sh -c "npm install && npm run dev"
