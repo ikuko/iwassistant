@@ -18,75 +18,6 @@ const EnginePaths = ['./app/builtin/engines/', './user/engines/'];
 
 const PluginPaths = ['./app/builtin/plugins/', './user/plugins/'];
 
-class EnvProxyHandler {
-  readonly paths: Array<string>;
-
-  constructor(paths: Array<string>) {
-    this.paths = paths;
-  }
-
-  get(target: any, p: PropertyKey, receiver: any): any {
-    const obj = target as Record<string, object>;
-    const suffix = p as string;
-    if (typeof obj[suffix] === 'function') {
-      return obj[suffix];
-    }
-    if (typeof obj[suffix] === 'object') {
-      return new Proxy(obj[suffix] as object, new EnvProxyHandler([...this.paths, suffix]));
-    }
-    if (obj[suffix] instanceof Proxy) {
-      return obj[suffix];
-    }
-    const key = [...this.paths, suffix].join('_').replaceAll('-', '__').toUpperCase();
-    if (process.env[key]) {
-      return process.env[key];
-    }
-    if (obj[suffix]) {
-      return obj[suffix];
-    }
-    if (Object.keys(process.env).some((x) => x.startsWith(key))) {
-      const regExp = new RegExp(`^${key}_(.+)`);
-      const keys = Object.keys(process.env)
-        .map((x) => x.match(regExp)?.[1])
-        .filter(Boolean)
-        .map((x) => x?.replaceAll('__', '-'))
-        .map((x) => x?.split('_')[0])
-        .map((x) => x?.toLowerCase());
-      if (keys.every((x) => x && /\d+/.test(x))) {
-        return keys.map((x) => (x ? process.env[`${key}_${x}`] : undefined));
-      } else {
-        const entries = keys
-          .filter((x): x is string => typeof x === 'string')
-          .filter((x) => process.env[`${key}_${x.replaceAll('-', '__')}`])
-          .map((x) => [process.env[`${key}_${x.replaceAll('-', '__')}`], {}]);
-        return new Proxy(Object.fromEntries(entries), new EnvProxyHandler([...this.paths, suffix]));
-      }
-    }
-    return undefined;
-  }
-
-  ownKeys(target: any): any {
-    const obj = target as Record<string, object>;
-    const prefix = [...this.paths].join('_').toUpperCase();
-    const regExp = new RegExp(`^${prefix}_(.+)`);
-    const keys = Object.keys(process.env)
-      .map((x) => x.match(regExp)?.[1])
-      .filter(Boolean)
-      .map((x) => x?.replaceAll('__', '-'))
-      .map((x) => x?.split('_')[0])
-      .map((x) => x?.toLowerCase());
-    return [...new Set([...Object.keys(obj), ...keys])];
-  }
-
-  getOwnPropertyDescriptor(target: any, p: PropertyKey): any {
-    return {
-      value: p,
-      enumerable: true,
-      configurable: true,
-    };
-  }
-}
-
 enum Status {
   unready,
   preparing,
@@ -209,8 +140,7 @@ export class App extends PluginAdapter<AppInterface> {
   static async env(name = 'default'): Promise<Env> {
     const { env } = (await import(`../../env/${name}`)) as Record<string, Env>;
     if (!env) throw new Error('Invalid env');
-    const proxy = new Proxy(env, new EnvProxyHandler(['iwassistant'])) as Env;
-    return JSON.parse(JSON.stringify(proxy)) as Env;
+    return env;
   }
 
   static di(env: Env, debug = false): DI {
