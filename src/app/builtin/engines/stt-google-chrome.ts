@@ -5,10 +5,9 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import type { WebSocket } from 'ws';
 import { Server } from 'ws';
-import type { App } from '../../classes/App';
-import { EventEmitter } from '../../classes/EventEmitter';
-import type { Logger } from '../../classes/Logger';
-import { Locales } from '../../locales';
+import type { App, Logger } from '../../classes';
+import { EventEmitter } from '../../classes';
+import { Locales } from '../../enums';
 import { isRegionLocale } from '../../utils';
 
 const DefaultVoice = 'en-US';
