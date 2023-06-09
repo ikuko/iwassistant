@@ -150,19 +150,8 @@ export type GuildAssistantInterface = {
   ): Awaitable<void>;
 };
 
-export type GuildAssistantOptions = {
-  /**
-   * Guild locale
-   */
-  locale: Locale;
-  /**
-   * Use slash commands
-   * @default true
-   */
-  slash: boolean;
-};
-
 export class GuildAssistant extends Assistant<GuildAssistantInterface> {
+  readonly locale: Locale;
   readonly self: GuildMember;
   readonly guild: Guild;
   readonly data: Datastore<'guild'>;
@@ -170,17 +159,15 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
   readonly engines: EngineManager;
   readonly audioPlayer: IAudioPlayer;
   readonly audioReceiver: GuildAudioReceiver;
-  readonly options: GuildAssistantOptions;
   readonly requiredPermissions: Set<PermissionsString>;
   readonly #voiceChannel: GuildVoiceChannel;
   #status: Status;
 
   constructor(
-    self: GuildMember,
-    guild: Guild,
-    options: GuildAssistantOptions,
-    assistantOptions: AssistantOptions,
+    options: { locale: Locale } & AssistantOptions,
     di: {
+      member: GuildMember;
+      guild: Guild;
       data: Datastore<'guild'>;
       log: Logger;
       engines: EngineManager;
@@ -188,22 +175,18 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
       audioReceiver: GuildAudioReceiver;
     },
   ) {
-    super(assistantOptions, di.log.error);
-    this.self = self;
-    this.guild = guild;
+    super(options, di.log.error);
+    this.locale = options.locale;
+    this.self = di.member;
+    this.guild = di.guild;
     this.data = di.data;
     this.log = di.log;
     this.engines = di.engines;
     this.audioPlayer = di.voiceChannel;
     this.audioReceiver = di.audioReceiver;
-    this.options = options;
     this.requiredPermissions = new Set(LeastPermissions);
     this.#voiceChannel = di.voiceChannel;
     this.#status = Status.unready;
-  }
-
-  get locale(): Locale {
-    return this.options.locale;
   }
 
   get voice(): JoinOptions | undefined {
@@ -222,7 +205,7 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
     this.log.debug?.('Attachments:', attachReport, this.attachments);
     this.initializeAssistant();
     this.#initializeEvents();
-    if (this.options.slash) await this.#updateSlashCommands();
+    await this.#updateSlashCommands();
     this.log.info(`Ready: ${this.guild.id}`);
     this.#status = Status.ready;
     this.emit('ready');
@@ -332,7 +315,7 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
     options:
       | { type: 'slash'; command: AttachedCommand; source: ChatInputCommandInteraction<'cached'> }
       | { type: 'text'; command: InterpretedCommand; source: Message<true> }
-      | { type: 'voice'; command: InterpretedCommand; source: RecognizableAudio },
+      | { type: 'voice'; command: InterpretedCommand; source: RecognizableAudio<'guild'> },
   ): void {
     switch (options.type) {
       case 'slash': {
@@ -342,7 +325,7 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
         return this.#runTextCommand(options.command, options.source);
       }
       case 'voice': {
-        return this.#runVoiceCommand(options.command, options.source as RecognizableAudio<'guild'>);
+        return this.#runVoiceCommand(options.command, options.source);
       }
     }
   }
@@ -515,8 +498,11 @@ export class GuildAssistant extends Assistant<GuildAssistantInterface> {
   transcribe(options: TranscribeOptions): boolean {
     const stt = this.engines.getSTT(options.engine);
     this.fallbackVoice(stt, options);
-    options.request.audio.prepare = async () => void (await this.hook('transcribe', options.request, stt));
-    return stt.transcribe(options.request);
+    if (!stt.transcribe(options.request)) return false;
+    this.hook('transcribe', options.request, stt)
+      .then(() => options.request.audio.emit('ready'))
+      .catch(this.log.error);
+    return true;
   }
 
   speak(options: string | CreateSpeechOptions): boolean {
@@ -588,13 +574,15 @@ class PlayableSpeechImpl
     return this.response?.resource;
   }
 
-  async generate(): Promise<void> {
+  generate(): void {
     if (this.response) return;
-    try {
-      this.response = await this.#generator(this.request);
-      this.emit('ready');
-    } catch (error) {
-      this.emit('error', error);
-    }
+    this.#generator(this.request)
+      .then((response) => {
+        this.response = response;
+        this.emit('ready');
+      })
+      .catch((error) => {
+        this.emit('error', error);
+      });
   }
 }

@@ -40,14 +40,12 @@ export class HomeAssistant extends Assistant<HomeAssistantInterface> {
   #status: Status;
 
   constructor(
-    locale: Locale,
-    options: HomeAssistantOptions | undefined,
-    assistantOptions: AssistantOptions | undefined,
+    options: { locale: Locale } & AssistantOptions & HomeAssistantOptions,
     di: { data: Datastore<'home'>; log: Logger; engines: EngineManager },
   ) {
     const log = di.log.createChild('HOME');
-    super(assistantOptions ?? {}, log.error);
-    this.locale = locale;
+    super(options, log.error);
+    this.locale = options.locale;
     this.data = di.data;
     this.log = log;
     this.engines = di.engines;
@@ -149,13 +147,15 @@ class PlayableSpeechImpl
     return this.response?.resource;
   }
 
-  async generate(): Promise<void> {
+  generate(): void {
     if (this.response) return;
-    try {
-      this.response = await this.#generator(this.request);
-      this.emit('ready');
-    } catch (error) {
-      this.emit('error', error);
-    }
+    this.#generator(this.request)
+      .then((response) => {
+        this.response = response;
+        this.emit('ready');
+      })
+      .catch((error) => {
+        this.emit('error', error);
+      });
   }
 }

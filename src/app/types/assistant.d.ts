@@ -2,7 +2,7 @@ type AssistantType = 'guild' | 'home';
 
 type PlayableAudio = {
   readonly resource: import('node:stream').Readable | undefined;
-  generate(): Promise<void>;
+  generate(): void;
 } & import('../classes').EventEmitter<{
   error: [error: unknown];
   ready: [];
@@ -38,8 +38,8 @@ type RecognizableAudio<T extends AssistantType = AssistantType> = (T extends 'gu
   readonly transcript: string;
   readonly aborted: boolean;
   abort(): void;
-  prepare?: () => Promise<void>;
 } & import('../classes').EventEmitter<{
+    ready: [];
     start: [request: STTRequest<T>];
     end: [request: STTRequest<T>];
     abort: [];

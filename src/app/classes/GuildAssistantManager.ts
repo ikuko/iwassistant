@@ -4,7 +4,6 @@ import { shortenId } from '../utils';
 import type { App } from './App';
 import type { AssistantOptions } from './Assistant';
 import { Datastore } from './Datastore';
-import type { GuildAssistantOptions } from './GuildAssistant';
 import { GuildAssistant } from './GuildAssistant';
 import { GuildAudioReceiver } from './GuildAudioReceiver';
 import { GuildVoiceChannel } from './GuildVoiceChannel';
@@ -16,39 +15,52 @@ enum Status {
   destroyed,
 }
 
-type GuildAssistantAdditionalOptions = {
+type GuildAssistantOptions = {
   /**
-   * Plugin settings for each guild
+   * Guild locale
    */
-  plugins: PluginContextOptions;
+  locale?: Locale;
+  /**
+   * Guild assistant settings
+   */
+  assistant?: AssistantOptions;
+  /**
+   * Guild plugin settings
+   */
+  plugins?: PluginContextOptions;
 };
 
-export type GuildAssistantManagerOptions = {
+export type GuildAssistantMangerOptions = {
   /**
-   * Default guild settings
+   * Default locale
    */
-  default?: Partial<GuildAssistantOptions & GuildAssistantAdditionalOptions>;
+  locale: Locale;
   /**
-   * Specific guild settings
+   * Assistant default settings
    */
-  [id: string]: Partial<GuildAssistantOptions & GuildAssistantAdditionalOptions>;
+  assistant?: AssistantOptions;
+  /**
+   * Each guild settings
+   */
+  guilds?: {
+    /**
+     * Default guild settings
+     */
+    default?: GuildAssistantOptions;
+    /**
+     * Specific guild settings
+     */
+    [id: string]: GuildAssistantOptions;
+  };
 };
 
 export class GuildAssistantManager {
-  readonly #locale: Locale;
-  readonly #options: GuildAssistantManagerOptions | undefined;
-  readonly #assistantOptions: AssistantOptions | undefined;
+  readonly #options: GuildAssistantMangerOptions;
   readonly #assistants: Map<string, GuildAssistant>;
   #status: Status;
 
-  constructor(
-    locale: Locale,
-    options: GuildAssistantManagerOptions | undefined,
-    assistantOptions: AssistantOptions | undefined,
-  ) {
-    this.#locale = locale;
+  constructor(options: GuildAssistantMangerOptions) {
     this.#options = options;
-    this.#assistantOptions = assistantOptions;
     this.#assistants = new Map();
     this.#status = Status.ready;
   }
@@ -65,18 +77,20 @@ export class GuildAssistantManager {
     return this.#assistants.get(guildId);
   }
 
-  async add(app: App, guild: Guild, options?: Partial<GuildAssistantOptions>): Promise<boolean> {
+  async add(app: App, guild: Guild): Promise<boolean> {
     if (this.#status !== Status.ready || this.#assistants.has(guild.id)) return false;
     const log = app.log.createChild(`GUILD:${shortenId(guild.id)}`);
     const assistant = new GuildAssistant(
-      guild.members.me ?? (await guild.members.fetch(guild.client.user.id)),
-      guild,
       {
-        locale: options?.locale ?? this.#options?.[guild.id]?.locale ?? this.#options?.default?.locale ?? this.#locale,
-        slash: options?.slash ?? this.#options?.[guild.id]?.slash ?? this.#options?.default?.slash ?? true,
+        locale:
+          this.#options.guilds?.[guild.id]?.locale ?? this.#options.guilds?.default?.locale ?? this.#options.locale,
+        ...(this.#options.guilds?.[guild.id]?.assistant ??
+          this.#options.guilds?.default?.assistant ??
+          this.#options.assistant),
       },
-      this.#assistantOptions ? structuredClone(this.#assistantOptions) : {},
       {
+        member: guild.members.me ?? (await guild.members.fetch(guild.client.user.id)),
+        guild,
         data: new Datastore(`guild-${guild.id}`),
         log,
         engines: app.engines,
@@ -97,8 +111,8 @@ export class GuildAssistantManager {
       },
     );
     const optionsList: PluginContextOptions[] = [];
-    const defaultOptions = this.#options?.default?.plugins;
-    const guildOptions = this.#options?.[guild.id]?.plugins;
+    const defaultOptions = this.#options.guilds?.default?.plugins;
+    const guildOptions = this.#options.guilds?.[guild.id]?.plugins;
     if (defaultOptions) optionsList.push(defaultOptions);
     if (guildOptions) optionsList.push(guildOptions);
     await assistant.setup(app, optionsList);

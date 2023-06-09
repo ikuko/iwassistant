@@ -38,7 +38,7 @@ type DI = {
 };
 
 export type AppInterface = {
-  beforeGuildAssistantSetup(assistant: GuildAssistant, optionsList: PluginContextOptions[]): Awaitable<void>;
+  beforeGuildAssistantSetup(assistant: Mutable<GuildAssistant>, optionsList: PluginContextOptions[]): Awaitable<void>;
   beforeDestroy(reason: string): Awaitable<void>;
   onReady(): Awaitable<void>;
   // Discord.js events
@@ -149,9 +149,12 @@ export class App extends PluginAdapter<AppInterface> {
     const plugins = new PluginManager(env.plugins, new ModuleLoader('plugin', PluginPaths));
     const discord = new DiscordManager(env.discord, {
       client: new Client({ intents: [] }),
-      assistants: new GuildAssistantManager(env.locale, env.guilds, env.assistant),
+      assistants: new GuildAssistantManager(env),
     });
-    const home = new HomeAssistant(env.locale, env.home, env.assistant, { data: new Datastore('home'), log, engines });
+    const home = new HomeAssistant(
+      { locale: env.locale, ...env.assistant, ...env.home },
+      { data: new Datastore('home'), log, engines },
+    );
     return { data: new Datastore('app'), log, engines, plugins, discord, home };
   }
 
