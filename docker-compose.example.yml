@@ -5,4 +5,8 @@ services:
     init: true
     volumes:
       - ./:/app
+    environment:
+      DISCORD_TOKEN: '__YOUR_DISCORD_TOKEN_HERE__'
+    healthcheck:
+      test: 'wget -q -O - http://127.0.0.1:18400/init || exit 1'
     command: /bin/sh -c "npm install && npm run dev"
