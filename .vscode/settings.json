@@ -25,5 +25,6 @@
     "undeafen",
     "vaio",
     "xvfb"
-  ]
+  ],
+  "prettier.prettierPath": "./node_modules/prettier"
 }
